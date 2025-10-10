@@ -9,18 +9,18 @@ import (
 
 // Struct associated with a job
 type CronsJobData struct {
-	CheckinId sentry.EventID
+	CheckinID sentry.EventID
 }
 
 // Constructor for cronsMonitorData
 func NewCronsJobData(checkinId sentry.EventID) *CronsJobData {
 	return &CronsJobData{
-		CheckinId: checkinId,
+		CheckinID: checkinId,
 	}
 }
 
-func (j *CronsJobData) getCheckinId() sentry.EventID {
-	return j.CheckinId
+func (j *CronsJobData) getCheckinID() sentry.EventID {
+	return j.CheckinID
 }
 
 // Struct associated with a cronJob
@@ -34,7 +34,6 @@ type CronsMonitorData struct {
 
 // Constructor for cronsMonitorData
 func NewCronsMonitorData(monitorSlug string, schedule string, completions *int32) *CronsMonitorData {
-
 	// Get required number of pods to complete
 	var requiredCompletions int32
 	if completions == nil {
@@ -56,18 +55,25 @@ func NewCronsMonitorData(monitorSlug string, schedule string, completions *int32
 }
 
 // Add a job to the crons monitor
-func (c *CronsMonitorData) addJob(job *batchv1.Job, checkinId sentry.EventID) error {
+func (c *CronsMonitorData) addJob(job *batchv1.Job, checkinID sentry.EventID) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	c.JobDatas[job.Name] = NewCronsJobData(checkinId)
+	c.JobDatas[job.Name] = NewCronsJobData(checkinID)
 	return nil
 }
 
-// wrapper struct over crons monitor map that
-// handles syncrhonization
+// Wrapper struct over crons monitor map that
+// handles synchronization
 type CronsMetaData struct {
 	mutex               *sync.RWMutex
 	cronsMonitorDataMap map[string]*CronsMonitorData
+}
+
+func NewCronsMetaData() *CronsMetaData {
+	return &CronsMetaData{
+		mutex:               &sync.RWMutex{},
+		cronsMonitorDataMap: make(map[string]*CronsMonitorData),
+	}
 }
 
 func (c *CronsMetaData) addCronsMonitorData(cronjobName string, newCronsMonitorData *CronsMonitorData) {
@@ -87,11 +93,4 @@ func (c *CronsMetaData) getCronsMonitorData(cronjobName string) (*CronsMonitorDa
 	defer c.mutex.RUnlock()
 	cronsMonitorData, ok := c.cronsMonitorDataMap[cronjobName]
 	return cronsMonitorData, ok
-}
-
-func NewCronsMetaData() *CronsMetaData {
-	return &CronsMetaData{
-		mutex:               &sync.RWMutex{},
-		cronsMonitorDataMap: make(map[string]*CronsMonitorData),
-	}
 }

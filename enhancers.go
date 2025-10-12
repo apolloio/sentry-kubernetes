@@ -171,10 +171,6 @@ func podEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.Object,
 	// Add the pod name to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindPod, podObj.Name)
 
-	// change the fingerprint to use the deployment name if possible
-	ownerName := getOwnerName(podObj)
-	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "ownerRef", ownerName)
-
 	// Add the pod to the tag
 	setTagIfNotEmpty(scope, "pod_name", object.GetName())
 	podObj.ManagedFields = []metav1.ManagedFieldsEntry{}
@@ -205,6 +201,9 @@ func jobEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.Object,
 
 	// Add the job to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindJob, jobObj.Name)
+
+	// Add owner_ref tag
+	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "owner_ref", jobObj.Name)
 
 	// Add the job to the tag
 	setTagIfNotEmpty(scope, "job_name", object.GetName())
@@ -240,6 +239,9 @@ func cronjobEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.Obj
 	// Add the cronjob to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindCronjob, cronjobObj.Name)
 
+	// Add owner_ref tag
+	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "owner_ref", cronjobObj.Name)
+
 	// Add the cronjob to the tag
 	setTagIfNotEmpty(scope, "cronjob_name", object.GetName())
 	cronjobObj.ManagedFields = []metav1.ManagedFieldsEntry{}
@@ -269,6 +271,9 @@ func replicaSetEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.
 	// Add the replicaset to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindReplicaset, replicasetObj.Name)
 
+	// Add owner_ref tag
+	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "owner_ref", replicasetObj.Name)
+
 	// Add the replicaset to the tag
 	setTagIfNotEmpty(scope, "replicaset_name", object.GetName())
 	replicasetObj.ManagedFields = []metav1.ManagedFieldsEntry{}
@@ -296,6 +301,9 @@ func deploymentEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.
 	}
 	// Add the deployment to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindDeployment, deploymentObj.Name)
+
+	// Add owner_ref tag
+	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "owner_ref", deploymentObj.Name)
 
 	// Add the deployment to the tag
 	setTagIfNotEmpty(scope, "deployment_name", object.GetName())

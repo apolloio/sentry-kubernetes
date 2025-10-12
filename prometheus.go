@@ -70,24 +70,20 @@ func updateOOMMetric(podObj *v1.Pod) {
 }
 
 func getOwnerName(podObj *v1.Pod) string {
-	deploymentName := "unknown"
 	if len(podObj.OwnerReferences) == 0 {
-		return deploymentName
+		return podObj.Name
 	}
+	name := "unknown"
 	switch podObj.OwnerReferences[0].Kind {
-	case "ReplicaSet":
-		replicaSetName := podObj.OwnerReferences[0].Name
-		deploymentName = sanitzeK8sResourceName(replicaSetName)
-	case "Job":
-		jobName := podObj.OwnerReferences[0].Name
-		deploymentName = sanitzeK8sResourceName(jobName)
+	case KindReplicaset, KindJob:
+		name = trimPossibleHash(podObj.OwnerReferences[0].Name)
 	default:
-		deploymentName = podObj.OwnerReferences[0].Name
+		name = podObj.OwnerReferences[0].Name
 	}
-	return deploymentName
+	return name
 }
 
-func sanitzeK8sResourceName(name string) string {
+func trimPossibleHash(name string) string {
 	parts := strings.Split(name, "-")
 	if len(parts) > 1 {
 		return strings.Join(parts[:len(parts)-1], "-")

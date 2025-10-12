@@ -57,6 +57,8 @@ func handlePodTerminationEvent(ctx context.Context, containerStatus *v1.Containe
 		)
 	}
 
+	updateOOMMetric(pod)
+
 	sentryEvent := buildSentryEventFromPodTerminationEvent(ctx, pod, message, scope)
 	return sentryEvent
 }

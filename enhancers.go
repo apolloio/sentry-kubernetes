@@ -171,6 +171,10 @@ func podEnhancer(ctx context.Context, scope *sentry.Scope, object metav1.Object,
 	// Add the pod name to the fingerprint
 	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, KindPod, podObj.Name)
 
+	// change the fingerprint to use the deployment name if possible
+	ownerName := getOwnerName(podObj)
+	sentryEvent.Fingerprint = append(sentryEvent.Fingerprint, "ownerRef", ownerName)
+
 	// Add the pod to the tag
 	setTagIfNotEmpty(scope, "pod_name", object.GetName())
 	podObj.ManagedFields = []metav1.ManagedFieldsEntry{}

@@ -66,6 +66,7 @@ func main() {
 	ctx := globalLogger.Logger.WithContext(context.Background())
 	startEventWatchers(ctx, config, namespaces)
 	startPodWatchers(ctx, config, namespaces)
+	go initPrometheus()
 
 	// Sleep forever
 	select {}

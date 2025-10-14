@@ -24,7 +24,7 @@ func initPrometheus() {
 	r := prometheus.NewRegistry()
 
 	upMetric := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "sentry_k8s_up",
+		Name:        "kube_events_tracker_up",
 		Help:        "Indicates if the Sentry Kubernetes integration is running (1 for running, 0 for not running)",
 		ConstLabels: prometheus.Labels{"cluster": clusterName},
 	})
@@ -32,7 +32,7 @@ func initPrometheus() {
 
 	oomMetric = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "sentry_k8s_oom_events_total",
+			Name: "kube_events_tracker_oomkilled_total",
 			Help: "Total number of OOMKilled events detected",
 		},
 		[]string{"cluster", "namespace", "component", "area", "deployment"},

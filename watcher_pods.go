@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -33,7 +32,7 @@ func handlePodTerminationEvent(ctx context.Context, containerStatus *v1.Containe
 	}
 
 	setTagIfNotEmpty(scope, "reason", state.Reason)
-	setTagIfNotEmpty(scope, "kind", pod.Kind)
+	setTagIfNotEmpty(scope, "kind", KindPod)
 	setTagIfNotEmpty(scope, "object_uid", string(pod.UID))
 	setTagIfNotEmpty(scope, "namespace", pod.Namespace)
 	setTagIfNotEmpty(scope, "pod_name", pod.Name)
@@ -43,9 +42,9 @@ func handlePodTerminationEvent(ctx context.Context, containerStatus *v1.Containe
 	// FIXME: there's no proper controller we can extract here, so inventing a new one
 	setTagIfNotEmpty(scope, "event_source_component", "x-pod-controller")
 
-	if containerStatusJson, err := prettyJson(containerStatus); err == nil {
+	if containerStatusJSON, err := prettyJSON(containerStatus); err == nil {
 		scope.SetContext("Container", sentry.Context{
-			"Status": containerStatusJson,
+			"Status": containerStatusJSON,
 		})
 	}
 
@@ -58,18 +57,20 @@ func handlePodTerminationEvent(ctx context.Context, containerStatus *v1.Containe
 		)
 	}
 
+	updateOOMMetric(pod)
+
 	sentryEvent := buildSentryEventFromPodTerminationEvent(ctx, pod, message, scope)
 	return sentryEvent
 }
 
 func buildSentryEventFromPodTerminationEvent(ctx context.Context, pod *v1.Pod, message string, scope *sentry.Scope) *sentry.Event {
+	logger := zerolog.Ctx(ctx)
+
 	sentryEvent := &sentry.Event{Message: message, Level: sentry.LevelError}
-	objectRef := &v1.ObjectReference{
-		Kind:      "Pod",
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
+	err := runEnhancers(ctx, nil, KindPod, pod, scope, sentryEvent)
+	if err != nil {
+		logger.Err(err)
 	}
-	runEnhancers(ctx, objectRef, pod, scope, sentryEvent)
 	return sentryEvent
 }
 
@@ -109,14 +110,13 @@ func handlePodWatchEvent(ctx context.Context, event *watch.Event) {
 
 	containerStatuses := podObject.Status.ContainerStatuses
 	logger.Trace().Msgf("Container statuses: %#v\n", containerStatuses)
-	for _, status := range containerStatuses {
+	for i, status := range containerStatuses {
 		state := status.State
 		if state.Terminated == nil {
 			// Ignore non-Terminated statuses
 			continue
 		}
 		hub.WithScope(func(scope *sentry.Scope) {
-
 			// If DSN annotation provided, we bind a new client with that DSN
 			client, ok := dsnClientMapping.GetClientFromObject(ctx, &podObject.ObjectMeta, hub.Client().Options())
 			if ok {
@@ -126,7 +126,7 @@ func handlePodWatchEvent(ctx context.Context, event *watch.Event) {
 			// Pass down clone context
 			ctx = sentry.SetHubOnContext(ctx, hub)
 			setWatcherTag(scope, podsWatcherName)
-			sentryEvent := handlePodTerminationEvent(ctx, &status, podObject, scope)
+			sentryEvent := handlePodTerminationEvent(ctx, &containerStatuses[i], podObject, scope)
 			if sentryEvent != nil {
 				hub.CaptureEvent(sentryEvent)
 			}
@@ -194,13 +194,10 @@ func watchPodsInNamespaceForever(ctx context.Context, config *rest.Config, names
 
 	ctx = setClientsetOnContext(ctx, clientset)
 
-	// Create the informers to integrate with sentry crons
-	if isTruthy(os.Getenv("SENTRY_K8S_MONITOR_CRONJOBS")) {
-		logger.Info().Msgf("Enabling CronJob monitoring")
-		go startCronsInformers(ctx, namespace)
-	} else {
-		logger.Info().Msgf("CronJob monitoring is disabled")
-	}
+	// Start the informers for Sentry event capturing
+	// and caching with the indexers
+	go startInformers(ctx, namespace)
+
 	for {
 		if err := watchPodsInNamespace(ctx, namespace); err != nil {
 			logger.Error().Msgf("Error while watching pods %s: %s", where, err)
@@ -212,8 +209,6 @@ func watchPodsInNamespaceForever(ctx context.Context, config *rest.Config, names
 
 func startPodWatchers(ctx context.Context, config *rest.Config, namespaces []string) {
 	for _, namespace := range namespaces {
-
 		go watchPodsInNamespaceForever(ctx, config, namespace)
-
 	}
 }

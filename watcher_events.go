@@ -35,10 +35,10 @@ func handleGeneralEvent(ctx context.Context, eventObject *v1.Event, scope *sentr
 	setTagIfNotEmpty(scope, "object_uid", string(involvedObject.UID))
 	setTagIfNotEmpty(scope, "namespace", involvedObject.Namespace)
 
-	name_tag := getObjectNameTag(&involvedObject)
-	setTagIfNotEmpty(scope, name_tag, involvedObject.Name)
+	nameTag := getObjectNameTag(&involvedObject)
+	setTagIfNotEmpty(scope, nameTag, involvedObject.Name)
 
-	if source, err := prettyJson(eventObject.Source); err == nil {
+	if source, err := prettyJSON(eventObject.Source); err == nil {
 		scope.SetContext("Event", sentry.Context{
 			"Source": source,
 		})
@@ -46,7 +46,7 @@ func handleGeneralEvent(ctx context.Context, eventObject *v1.Event, scope *sentr
 	setTagIfNotEmpty(scope, "event_source_component", eventObject.Source.Component)
 	eventObject.Source = v1.EventSource{}
 
-	if involvedObject, err := prettyJson(eventObject.InvolvedObject); err == nil {
+	if involvedObject, err := prettyJSON(eventObject.InvolvedObject); err == nil {
 		scope.SetContext("InvolvedObject", sentry.Context{
 			"Object": involvedObject,
 		})
@@ -55,7 +55,7 @@ func handleGeneralEvent(ctx context.Context, eventObject *v1.Event, scope *sentr
 
 	// clean-up the event a bit
 	eventObject.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
-	if metadata, err := prettyJson(eventObject.ObjectMeta); err == nil {
+	if metadata, err := prettyJSON(eventObject.ObjectMeta); err == nil {
 		scope.SetContext("Event", sentry.Context{
 			"Metadata": metadata,
 		})
@@ -63,7 +63,7 @@ func handleGeneralEvent(ctx context.Context, eventObject *v1.Event, scope *sentr
 	eventObject.ObjectMeta = metav1.ObjectMeta{}
 
 	// The entire (remaining) event
-	if kubeEvent, err := prettyJson(eventObject); err == nil {
+	if kubeEvent, err := prettyJSON(eventObject); err == nil {
 		scope.SetContext("Misc", sentry.Context{
 			"Kube": kubeEvent,
 		})
@@ -74,13 +74,20 @@ func handleGeneralEvent(ctx context.Context, eventObject *v1.Event, scope *sentr
 }
 
 func buildSentryEventFromGeneralEvent(ctx context.Context, event *v1.Event, scope *sentry.Scope) *sentry.Event {
+	logger := zerolog.Ctx(ctx)
+
 	sentryEvent := &sentry.Event{Message: event.Message, Level: sentry.LevelError}
-	objectRef := &v1.ObjectReference{
-		Kind:      event.InvolvedObject.Kind,
-		Name:      event.InvolvedObject.Name,
-		Namespace: event.InvolvedObject.Namespace,
+
+	involvedObj, _ := findObject(ctx, event.InvolvedObject.Kind, event.InvolvedObject.Namespace, event.InvolvedObject.Name)
+
+	// Run enhancers on the event
+	// note: the involved object may be unsupported
+	// in which case it would be nil but that is handled
+	// correctly in the enhancers
+	err := runEnhancers(ctx, event, event.InvolvedObject.Kind, involvedObj, scope, sentryEvent)
+	if err != nil {
+		logger.Err(err)
 	}
-	runEnhancers(ctx, objectRef, nil, scope, sentryEvent)
 	return sentryEvent
 }
 
@@ -143,12 +150,11 @@ func handleWatchEvent(ctx context.Context, event *watch.Event, cutoffTime metav1
 	// To avoid concurrency issue
 	hub = hub.Clone()
 	hub.WithScope(func(scope *sentry.Scope) {
-
 		// Find the object meta that the event is about
-		objectMeta, ok := findObjectMeta(ctx, eventObject.InvolvedObject.Kind, eventObject.InvolvedObject.Namespace, eventObject.InvolvedObject.Name)
+		object, ok := findObject(ctx, eventObject.InvolvedObject.Kind, eventObject.InvolvedObject.Namespace, eventObject.InvolvedObject.Name)
 		if ok {
 			// if DSN annotation provided, we bind a new client with that DSN
-			client, ok := dsnClientMapping.GetClientFromObject(ctx, objectMeta, hub.Client().Options())
+			client, ok := dsnClientMapping.GetClientFromObject(ctx, object, hub.Client().Options())
 			if ok {
 				hub.BindClient(client)
 			}

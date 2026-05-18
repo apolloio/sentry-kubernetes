@@ -49,7 +49,10 @@ func main() {
 
 	setKubernetesSentryContext(config)
 	setGlobalSentryTags()
-	runIntegrations()
+	err = runIntegrations()
+	if err != nil {
+		globalLogger.Fatal().Msgf("Integration error: %s", err)
+	}
 
 	watchAllNamespaces, namespaces, err := getNamespacesToWatch()
 	if err != nil {
@@ -63,6 +66,7 @@ func main() {
 	ctx := globalLogger.Logger.WithContext(context.Background())
 	startEventWatchers(ctx, config, namespaces)
 	startPodWatchers(ctx, config, namespaces)
+	go initPrometheus()
 
 	// Sleep forever
 	select {}
